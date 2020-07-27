@@ -1,0 +1,9 @@
+[requires]
+opencv/4.3.0@conan/stable
+
+[options]
+opencv:gtk=3
+
+[generators]
+cmake
+
