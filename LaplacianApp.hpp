@@ -70,7 +70,6 @@ class LaplacianApp {
       for(const auto& entry : fs::directory_iterator(directory_path))
       {
         asio::dispatch(pool, [this, entry](){
-            std::cout << entry.path();
             cv::Mat src, src_gray, laplacian, scaled, mean, stdDev, variance;
             src = cv::imread(entry.path());
             cv::cvtColor(src, src_gray, cv::COLOR_BGR2GRAY);
