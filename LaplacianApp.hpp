@@ -2,6 +2,7 @@
 #include <thread>
 #include <fstream>
 #include <filesystem>
+#include <algorithm>
 #include <boost/program_options.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/asio/dispatch.hpp>
@@ -35,15 +36,16 @@ class LaplacianApp {
     };
 
 
-    LaplacianApp(int argc, char* argv[]): pool{6}, cli_interface{"Allowed options"} {
+    LaplacianApp(int argc, char* argv[]): cli_interface{"Allowed options"} {
       cli_interface.add_options()
           ("help,h", "This help message")
           ("directory,d", cli::value<fs::path>(),"Where this program should look for pictures to be analyzed")
+          ("threads,t", cli::value<std::size_t>(), "How many worker threads to spawn")
           ("save-to,s", cli::value<fs::path>(), "Where csv file will be saved");
       cli::store(cli::parse_command_line(argc, argv,cli_interface), vm);
       cli::notify(vm);
 
-      if(vm.count("help") || argc!=5){
+      if(vm.count("help") || argc!=7){
         throw Error(std::move(cli_interface));
       }
 
@@ -63,10 +65,20 @@ class LaplacianApp {
         std::cout << "There are missing options. See help for more information.\n";
         throw Error(std::move(cli_interface));
       }
+
+      auto max_thread_count = std::thread::hardware_concurrency();
+      if(vm.count("threads") && vm["threads"].as<std::size_t>() < max_thread_count){
+        thread_count = vm["threads"].as<std::size_t>();
+      } else {
+        thread_count = std::max(std::size_t(max_thread_count-2),std::size_t{2});
+        std::cout << "Invalid option. Defaulting to " << thread_count << " threads.\n";
+      }
     }
 
     // Program should only reach this point if the command line options are properly set.
     int run(){
+      asio::thread_pool pool{thread_count};
+
       for(const auto& entry : fs::directory_iterator(directory_path))
       {
         asio::dispatch(pool, [this, entry](){
@@ -88,7 +100,7 @@ class LaplacianApp {
 
       pool.join();
 
-      std::cout << thread_ids.size() << " threads were required to perform the jobs submitted to the pool.\n";
+      std::cout << thread_ids.size() << " threads were used to perform the jobs submitted to the pool.\n";
 
       std::sort(variances_flatmap.begin(), variances_flatmap.end(), compare_by_second<Pair>);
       std::cout << "== [Top 5 variances] ==\n";
@@ -121,9 +133,8 @@ class LaplacianApp {
 
     std::mutex variances_flatmap_mutex;
     std::vector<Pair> variances_flatmap;
-    asio::thread_pool pool;
     fs::path directory_path, csv_path;
     std::set<std::thread::id> thread_ids;
-
+    std::size_t thread_count;
 };
 
